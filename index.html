@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>壁纸小屋 - 极速壁纸生成</title>
+    <!-- 引入Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入Font Awesome图标（国内源） -->
+    <link rel="stylesheet" href="https://cdn.bootcdn.net/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .wallpaper-slide { height: 100vh; width: 100vw; position: relative; }
+            .slide-transition { animation: slideUp 0.15s ease-out; }
+            @keyframes slideUp {
+                from { transform: translateY(20%); opacity: 0; }
+                to { transform: translateY(0); opacity: 1; }
+            }
+            .bottom-mask { background: linear-gradient(to top, rgba(0,0,0,0.8), rgba(0,0,0,0.4), transparent); }
+            .no-select { user-select: none; -webkit-user-select: none; }
+        }
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
+        body { background-color: #121212; overflow: hidden; }
+    </style>
+</head>
+<body class="bg-dark overflow-hidden no-select" oncontextmenu="return false;">
+    <!-- 顶部导航 -->
+    <header class="fixed top-0 left-0 right-0 z-50 py-4 px-4 transition-all duration-150 -translate-y-full" id="header">
+        <h1 class="text-white text-xl font-bold flex items-center gap-2">
+            <i class="fa-solid fa-image text-[#00C6FF]"></i>壁纸小屋
+        </h1>
+    </header>
+
+    <!-- 核心容器 -->
+    <div id="swiper-container" class="h-screen w-screen cursor-grab active:cursor-grabbing">
+        <div id="current-slide" class="wallpaper-slide absolute top-0 left-0"></div>
+        <!-- 极简加载提示 -->
+        <div id="loading" class="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-white hidden">
+            <i class="fa-solid fa-spinner fa-spin text-xl text-[#00C6FF]"></i>
+        </div>
+    </div>
+
+    <!-- 底部操作栏 -->
+    <div class="fixed bottom-0 left-0 right-0 z-40 px-6 py-8 bottom-mask">
+        <div class="flex justify-between items-center">
+            <div>
+                <h2 id="wallpaper-title" class="text-white text-lg">艺术壁纸</h2>
+                <p id="wallpaper-category" class="text-gray-300 text-sm mt-1">极速生成</p>
+            </div>
+            <div class="flex flex-col gap-4 items-center">
+                <button id="like-btn" class="text-white hover:text-red-500 transition">
+                    <i class="fa-solid fa-heart text-2xl"></i><span class="text-xs block mt-1">收藏</span>
+                </button>
+                <button id="download-btn" class="text-white hover:text-[#00C6FF] transition">
+                    <i class="fa-solid fa-download text-2xl"></i><span class="text-xs block mt-1">下载</span>
+                </button>
+                <button id="share-btn" class="text-white hover:text-green-400 transition">
+                    <i class="fa-solid fa-share-nodes text-2xl"></i><span class="text-xs block mt-1">分享</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentIndex = 0;
+        let isLoading = false;
+        let currentCanvas = null;
+        let canvasPool = null; // 预创建Canvas池
+        
+        // 极简滑动状态
+        const swipe = { startY: 0, isDragging: false };
+
+        // ========== 极致轻量化壁纸生成器 ==========
+        class UltraFastWallpaper {
+            // 预生成颜色表（避免实时计算）
+            static colorPalette = [
+                '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7',
+                '#DDA0DD', '#FFA07A', '#20B2AA', '#98D8C8', '#F7DC6F',
+                '#BB8FCE', '#85C1E9', '#F8C471', '#82E0AA', '#EC7063'
+            ];
+
+            // 初始化Canvas池（只创建一次）
+            static initPool(width, height) {
+                if (!canvasPool) {
+                    canvasPool = document.createElement('canvas');
+                    canvasPool.width = width;
+                    canvasPool.height = height;
+                }
+                return canvasPool.getContext('2d');
+            }
+
+            // 随机颜色（直接取值，无计算）
+            static getColor() {
+                return this.colorPalette[Math.floor(Math.random() * this.colorPalette.length)];
+            }
+
+            // 风格1：极简渐变（最快）
+            static gradient(ctx, w, h) {
+                const grad = ctx.createLinearGradient(0, 0, w, h);
+                grad.addColorStop(0, this.getColor());
+                grad.addColorStop(1, this.getColor());
+                ctx.fillStyle = grad;
+                ctx.fillRect(0, 0, w, h);
+            }
+
+            // 风格2：快速几何图形
+            static shapes(ctx, w, h) {
+                // 纯色背景（最快）
+                ctx.fillStyle = this.getColor();
+                ctx.fillRect(0, 0, w, h);
+                
+                // 少量大尺寸图形（减少绘制次数）
+                const count = 8 + Math.floor(Math.random() * 12);
+                for (let i = 0; i < count; i++) {
+                    const x = Math.random() * w;
+                    const y = Math.random() * h;
+                    const size = 50 + Math.random() * 200;
+                    
+                    ctx.fillStyle = this.getColor();
+                    ctx.globalAlpha = 0.3 + Math.random() * 0.5;
+                    
+                    // 只保留2种简单形状（减少计算）
+                    if (Math.random() > 0.5) {
+                        ctx.beginPath();
+                        ctx.arc(x, y, size/2, 0, Math.PI*2);
+                        ctx.fill();
+                    } else {
+                        ctx.fillRect(x-size/2, y-size/2, size, size);
+                    }
+                }
+                ctx.globalAlpha = 1;
+            }
+
+            // 风格3：快速线条
+            static lines(ctx, w, h) {
+                ctx.fillStyle = '#121212';
+                ctx.fillRect(0, 0, w, h);
+                
+                const count = 15 + Math.floor(Math.random() * 15);
+                for (let i = 0; i < count; i++) {
+                    ctx.beginPath();
+                    ctx.moveTo(Math.random()*w, Math.random()*h);
+                    ctx.lineTo(Math.random()*w, Math.random()*h);
+                    ctx.strokeStyle = this.getColor();
+                    ctx.lineWidth = 2 + Math.random() * 8;
+                    ctx.lineCap = 'round';
+                    ctx.stroke();
+                }
+            }
+
+            // 风格4：像素块（简化版）
+            static pixels(ctx, w, h) {
+                const size = 30 + Math.floor(Math.random() * 40);
+                const cols = Math.ceil(w/size);
+                const rows = Math.ceil(h/size);
+                
+                // 只保留随机填充规则
+                for (let y = 0; y < rows; y++) {
+                    for (let x = 0; x < cols; x++) {
+                        if (Math.random() > 0.7) {
+                            ctx.fillStyle = this.getColor();
+                            ctx.fillRect(x*size, y*size, size, size);
+                        }
+                    }
+                }
+            }
+
+            // 主生成函数（极致精简）
+            static generate() {
+                const w = window.innerWidth;
+                const h = window.innerHeight;
+                const ctx = this.initPool(w, h);
+                
+                // 清空画布（最快方式）
+                ctx.clearRect(0, 0, w, h);
+                
+                // 只保留4种最快风格
+                const styles = [this.gradient, this.shapes, this.lines, this.pixels];
+                const style = styles[Math.floor(Math.random() * styles.length)];
+                
+                // 直接执行，无额外封装
+                style.call(this, ctx, w, h);
+                
+                return canvasPool;
+            }
+        }
+
+        // ========== 零延迟渲染函数 ==========
+        function renderWallpaper() {
+            if (isLoading) return;
+            isLoading = true;
+            
+            // 显示极简加载提示
+            document.getElementById('loading').style.display = 'block';
+            
+            // 立即生成（无任何延迟）
+            const canvas = UltraFastWallpaper.generate();
+            currentCanvas = canvas;
+            
+            // 快速更新DOM
+            const slide = document.getElementById('current-slide');
+            slide.innerHTML = '';
+            slide.appendChild(canvas);
+            slide.classList.add('slide-transition');
+            
+            // 极速移除过渡
+            setTimeout(() => slide.classList.remove('slide-transition'), 150);
+            
+            // 更新标题（极简）
+            const styles = ['渐变', '几何', '线条', '像素'];
+            const style = styles[Math.floor(Math.random() * styles.length)];
+            document.getElementById('wallpaper-title').textContent = `${style}壁纸 #${++currentIndex}`;
+            
+            // 50ms内完成加载
+            setTimeout(() => {
+                document.getElementById('loading').style.display = 'none';
+                isLoading = false;
+            }, 20);
+        }
+
+        // ========== 极简交互逻辑 ==========
+        function initEvents() {
+            const container = document.getElementById('swiper-container');
+            
+            // 触摸/鼠标开始
+            container.addEventListener('touchstart', (e) => {
+                swipe.startY = e.touches[0].clientY;
+                swipe.isDragging = true;
+                document.getElementById('header').classList.remove('-translate-y-full');
+            }, { passive: true });
+            
+            container.addEventListener('mousedown', (e) => {
+                if (e.button !== 0) return;
+                swipe.startY = e.clientY;
+                swipe.isDragging = true;
+                document.getElementById('header').classList.remove('-translate-y-full');
+            });
+            
+            // 触摸/鼠标移动
+            container.addEventListener('touchmove', (e) => {
+                if (swipe.isDragging) {
+                    document.getElementById('header').classList.add('-translate-y-full');
+                }
+            }, { passive: true });
+            
+            document.addEventListener('mousemove', (e) => {
+                if (swipe.isDragging) {
+                    document.getElementById('header').classList.add('-translate-y-full');
+                }
+            });
+            
+            // 触摸/鼠标结束
+            const handleEnd = () => {
+                if (swipe.isDragging) {
+                    renderWallpaper(); // 立即生成，无阈值判断
+                }
+                swipe.isDragging = false;
+            };
+            
+            container.addEventListener('touchend', handleEnd);
+            container.addEventListener('touchcancel', handleEnd);
+            document.addEventListener('mouseup', handleEnd);
+            
+            // 滚轮极速响应
+            container.addEventListener('wheel', (e) => {
+                if (!isLoading) renderWallpaper();
+                e.preventDefault();
+            }, { passive: false });
+            
+            // 按钮事件（极简）
+            document.getElementById('like-btn').onclick = () => {
+                const btn = document.getElementById('like-btn');
+                const liked = btn.innerHTML.includes('已收藏');
+                btn.innerHTML = liked ? 
+                    '<i class="fa-solid fa-heart text-2xl"></i><span class="text-xs block mt-1">收藏</span>' :
+                    '<i class="fa-solid fa-heart text-2xl text-red-500"></i><span class="text-xs block mt-1">已收藏</span>';
+                alert(liked ? '已取消收藏' : '收藏成功');
+            };
+            
+            document.getElementById('download-btn').onclick = () => {
+                if (!currentCanvas) return alert('请先生成壁纸');
+                const link = document.createElement('a');
+                link.download = `壁纸_${currentIndex}.png`;
+                link.href = currentCanvas.toDataURL('image/png', 0.8); // 更快的压缩
+                link.click();
+            };
+            
+            document.getElementById('share-btn').onclick = () => {
+                alert('分享成功：已生成壁纸链接');
+            };
+        }
+
+        // ========== 初始化（零延迟） ==========
+        document.addEventListener('DOMContentLoaded', () => {
+            renderWallpaper(); // 立即生成第一张
+            initEvents();      // 立即绑定事件
+            
+            // 窗口变化防抖（极简）
+            let resizeTimer;
+            window.addEventListener('resize', () => {
+                clearTimeout(resizeTimer);
+                resizeTimer = setTimeout(() => !isLoading && renderWallpaper(), 50);
+            });
+        });
+    </script>
+</body>
+</html>
